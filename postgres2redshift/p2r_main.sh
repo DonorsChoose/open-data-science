@@ -1,5 +1,10 @@
 #!/bin/sh
 
+### LICENSE
+  # Author: Vlad Dubovskiy, November 2014, DonorsChoose.org
+  # Special thanks to: David Crane for code snippets on parsing command args
+  # License: Copyright (c) This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 3 of the License, or (at your option) any later version.
+
 # Load settings, tables file
 source /path_to_scripts/p2r_settings.sh
 
@@ -178,8 +183,14 @@ sed -i.bak 's/numeric(45/numeric(37/g' $SCRPTDIR/schema_clean.sql
 sed -i.bak 's/json NOT NULL/text NOT NULL/g' $SCRPTDIR/schema_clean.sql
 # Replace columns named "open" with "open_date", as "open" is a reserved word. Other Redshift reserved words: time, user
 sed -i.bak 's/open character/open_date character/g' $SCRPTDIR/schema_clean.sql
+# TEXT type is not supported and auto converted, so need to enforce boundless varchar instead: http://docs.aws.amazon.com/redshift/latest/dg/r_Character_types.html
+# Also, remove all NOT NULL constraints on varchar/text types that break import due to collision with Redshift's BLANKSASNULL AND EMPTYASNULL copy flags
+# Removing NOT NULL on some tables may cause index errors in redshift.err log. If the issue cause problems, then just edit the regex to keep NOT NULL on columns that are supposed to be PRIMARY KEY
+sed -i.bak -e 's/\(.*\) \(\btext\b\|\bcharacter varying\b.*\) NOT NULL/\1 \2/' \
+      -e 's/\(.*\) \btext\b/\1 varchar(max)/' $SCRPTDIR/schema_clean.sql
 # Custom Cleaning (add any regex to clean out other edge cases if your schema fails to build in Redshift)
-sed -i.bak '/CREATE TABLE your_table_name*/,/);/d' $SCRPTDIR/schema_clean.sql
+sed -i.bak '/CREATE TABLE your_unwanted_table_name*/,/);/d' $SCRPTDIR/schema_clean.sql
+
 
 ##### 2. Add sortkeys to table definitions (python script)
 
@@ -223,7 +234,7 @@ date
   # To test without the data load, add NOLOAD to the copy command. 
   # CSV cannot be used with FIXEDWIDTH, REMOVEQUOTES, or ESCAPE.
   # Remove MAXERROR from production. Analysize /tmp/p2r.err for error log
-  # NULLify empties: BLANKSASNULL, EMPTYASNULL. See Error management notes below before adding.
+  # NULLify empties: BLANKSASNULL, EMPTYASNULL.
 
 # restore original tables
 for table in $TABLES
@@ -232,7 +243,7 @@ do
     "SET search_path TO $TMPSCHEMA;
     copy ${table} from 's3://$S3BUCKET/${table}.txt.gz' \
       CREDENTIALS 'aws_access_key_id=$RSKEY;aws_secret_access_key=$RSSECRET' \
-      CSV DELIMITER '|' IGNOREHEADER 0 ACCEPTINVCHARS TRUNCATECOLUMNS GZIP TRIMBLANKS DATEFORMAT 'auto' ACCEPTANYDATE COMPUPDATE ON MAXERROR 100000;" 1>>$STDOUT 2>>$STDERR
+      CSV DELIMITER '|' IGNOREHEADER 0 ACCEPTINVCHARS TRUNCATECOLUMNS GZIP TRIMBLANKS BLANKSASNULL EMPTYASNULL DATEFORMAT 'auto' ACCEPTANYDATE COMPUPDATE ON MAXERROR 100;" 1>>$STDOUT 2>>$STDERR
 done
 
 # restore custom tables
@@ -242,7 +253,7 @@ do
     "SET search_path TO $TMPSCHEMA;
     copy ${table} from 's3://$S3BUCKET/${table}.txt.gz' \
       CREDENTIALS 'aws_access_key_id=$RSKEY;aws_secret_access_key=$RSSECRET' \
-      CSV DELIMITER '|' IGNOREHEADER 0 ACCEPTINVCHARS TRUNCATECOLUMNS GZIP TRIMBLANKS DATEFORMAT 'auto' ACCEPTANYDATE COMPUPDATE ON MAXERROR 100000;" 1>>$STDOUT 2>>$STDERR
+      CSV DELIMITER '|' IGNOREHEADER 0 ACCEPTINVCHARS TRUNCATECOLUMNS GZIP TRIMBLANKS BLANKSASNULL EMPTYASNULL DATEFORMAT 'auto' ACCEPTANYDATE COMPUPDATE ON MAXERROR 100;" 1>>$STDOUT 2>>$STDERR
 done
 
 # Swap temp_schema for production schema
@@ -272,10 +283,6 @@ echo "***********************************"
 ########################################
 #        COPY Error Management
 ########################################
-
-# NOT NULL condition violated in the presence BLANKSASNULL or EMPTYASNULL COPY option:
-  # solution: replace empties and blanks in tables, drop COPY options or adjust schema definition. 
-    # went with dropping COPY options for now (despite the fact that I'd love to have NULLs over empties)
 
 # table.columnx has a wrong date format error:
   # solution: DATEFORMAT 'auto' ACCEPTANYDATE options, which NULLs any unrecognized date formats
