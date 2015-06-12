@@ -29,6 +29,10 @@ S3BUCKET=name_of_s3_bucket # S3 bucket to which your machine has API read/write 
 STDERR=/tmp/p2r.err
 STDOUT=/tmp/p2r.out
 LOCKFILE=/tmp/p2r.lock
+# EMAIL NOTIFICATION
+RECIPIENT='you@yoursite.com'
+SENDER='system@yoursite.com'
+SUBJECT='Redshift Refresh Failures'
 
 # do not add views or functions to redshift. These are actual names of tables in your Postgres database
 TABLES='table1 table2 table3 table4 table5
