@@ -1,0 +1,17 @@
+# Python 3.6.x
+
+pandas==0.22.0
+numpy==1.14.0
+nltk==3.2.5
+# need to download stopwords: python -m nltk.downloader stopwords
+fuzzywuzzy==0.16.0
+statsmodels==0.8.0
+pytrends==4.3.0
+
+# From dash
+dash==0.21.1  # The core dash backend
+dash-renderer==0.12.1  # The dash front-end
+dash-html-components==0.10.1  # HTML components
+dash-core-components==0.22.1  # Supercharged components
+plotly # Plotly graphing library used in examples
+boto3 # boto3 to interact with AWS resources
